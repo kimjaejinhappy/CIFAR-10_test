@@ -19,7 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 from models.resnet import get_resnet
 from train.data import get_cifar10_loaders
 from train.supervised import train, final_test 
-#위에 코드 지울 예정 for train.supervised import train
+
 
 # --- 2. 메인 실행 함수 정의 ---
 def main():
