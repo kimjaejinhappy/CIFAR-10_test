@@ -2,8 +2,74 @@
 
 # --- 1. 필요한 도구 가져오기 ---
 import torch
+import numpy as np
+
+
+# Earlystopping 클래스
+    #validation loss를 모니터링해서 손실이 개선되지 않을 경우, 훈련을 조기 종료
+
+class EarlyStopping:
+    def __init__(self, patience =5, verbose=False, delta=0, mode='min'):
+            """ 
+        patience: 개선이 없을 때 몇번의 에포크를 더 기다릴지 
+        verbose:  조기 종료 메세지 출력 여부, 처음에는 false, 그러다가 이제 patience를 끝까지 도달하면 true로 변경
+        delta :  개선되었다고 판단할 최소 변화량
+        mode: min loss를 계속 트레킹하고 있기
+        """
+            self.patience= patience # 몇 번 기다릴지
+            self.verbose= verbose
+            self.counter= 0 #현재 n번 에포크를 진행했지만 개선되지 않았을 때 에포크 횟수(n번)
+            self.best_score = None # 지그까지 가장 좋은 성능은 정해지지 않았다(None)
+            self.early_stop = False
+            self.delta = delta
+            self.mode = mode
+
+            if self.mode == "min": # loss로 판단할때, accuracy 말고
+                 self.val_score = np.inf  #무한
+            else:
+                 self.val_score = -np.inf 
+    
+    def __call__(self, current_score, model, path):
+         """ validation loss 보고 early stopping을 체크하고 모델 저장
+
+         Args:
+            current-score: 현재 에포크의 validation loss
+            model: 현재 훈련중인 모델
+            path:  최적 모델 가중치를 저장할 경로
+         """
+         # loss 모니터링할 때 점수가 낮을수록 좋으니까, 미리 그냥 바꿈.
+         score = -current_score if self.mode == 'min' else current_score
+
+         if self.best_score is None:
+              self.best_score = score
+              self.save_checkpoint(current_score, model, path)
+         elif score < self.best_score + self.delta:
+              self.counter += 1
+              if self.verbose:
+                   print(f"EarlyStopping counter: {self.counter} out of {self.patience}.")
+              if self.counter >= self.patience:
+                   self.early_stop = True
+         else:
+              self.best_score = score
+              self.save_checkpoint(current_score, model, path)
+              self.counter = 0
+
+
+    def save_checkpoint(self, val_score, model, path):
+         #최적 모델 저장
+         if self.verbose:
+                if self.mode == 'min':
+                     print(f'Validation loss improved ({float(self.val_score):.6f} --> {float(val_score):.6f}). Saving model...')
+                else:
+                     print(f'Validation Acc improved ({float(self.val_score):.2f}%)--> {float(val_score):.2f}%). Saving model...')
+
+         #모델 가중치 저장
+         torch.save(model.state_dict(), path)
+         self.val_score = val_score
+
 
 # --- 2. 평균 계량기 (AverageMeter) 클래스 ---
+
 class AverageMeter:
     """
     Epoch 내에서 손실(loss)이나 정확도(accuracy) 같은 값들의
@@ -67,4 +133,4 @@ def accuracy(output, target):
         return acc
 
 # --- 4. 다른 파일에서 이 파일을 import 할 때, 어떤 것들을 공개할지 명시 (선택사항) ---
-__all__ = ['AverageMeter', 'accuracy']
+__all__ = ['AverageMeter', 'accuracy', 'EarlyStopping']

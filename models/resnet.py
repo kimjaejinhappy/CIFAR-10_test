@@ -11,7 +11,7 @@ class BasicBlock(nn.Module):
     - 입력과 출력을 더함 (skip connection)
     - 필요시 downsample로 차원을 맞춤
     """
-    expansion = 1  # 출력 채널 확장 계수 (Bottleneck 블록에서는 4) ->? 이게 뭐지?
+    expansion = 1  # 출력 채널 확장 계수, basicblock에서는 확장하지 않음,  (참고: ResNet-50에서는 Bottleneck 블록에서는 4를 사용)
 
     def __init__(self, in_channels, out_channels, stride=1, downsample=None):
         """
@@ -80,6 +80,7 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
+        #최종 분류 layer
         # AdaptiveAvgPool2d: 입력 크기와 상관없이 1x1로 평균
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
@@ -114,16 +115,18 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        # 입력층
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
+        # (B,3,H,W) -> (batchsize:한 번에 모델에 주입할 데이터의 양, channel 수, 이미지 세로길이 , 이미지 가로길이)
+        # 입력층 (B, 3,32,32) 
+
+        x = self.conv1(x)   #(B,64,32,32) 
+        x = self.bn1(x)     #(B,64,32,32) 
+        x = self.relu(x)    #(B,64,32,32) 
 
         # 네 개의 stage
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        x = self.layer1(x)    #(B,64,32,32) 
+        x = self.layer2(x)    #(B,128,16,16) 
+        x = self.layer3(x)    #(B,256,8,8) 
+        x = self.layer4(x)    #(B,512,4,4) 
 
         # 분류를 위한 평균 풀링, flatten, FC
         x = self.avgpool(x)      # (B, 512, 1, 1)
