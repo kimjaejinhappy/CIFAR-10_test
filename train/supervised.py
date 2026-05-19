@@ -121,9 +121,10 @@ def evaluate(model, data_loader, criterion, device):
 
 #-----------------------------------------------------------------------------------------
 
-# train 함수: 지정된 에포크마다 훈련하는 함수 
-def train(model, train_loader, val_loader, optimizer, criterion, device, epochs, patience, writer):
-    # 지정된 에포크만큼 후녈나혹, validation loss를 기반으로 early stopping함
+# train 함수: 지정된 에포크마다 훈련하는 함수
+def train(model, train_loader, val_loader, optimizer, scheduler, criterion, device, epochs, patience, writer):
+    # 지정된 에포크만큼 훈련, validation loss를 기반으로 early stopping함
+    # scheduler: epoch 단위 LR 스케줄러 (예: CosineAnnealingLR)
 
     #1. early stooping 객체 및 저장 경로 준비
     early_stopper = EarlyStopping(patience=patience, verbose = True, mode = "min")
@@ -145,13 +146,15 @@ def train(model, train_loader, val_loader, optimizer, criterion, device, epochs,
         #validation
         val_loss, val_acc = evaluate(model, val_loader, criterion, device )
 
-        # 결과
-       # writer.add_scalar('Loss/Train', train_loss, epoch)
-       #writer.add_scalar('Loss/Validation', val_loss, epoch)
-        #writer.add_scalar('Accuracy/Train', train_acc, epoch)
-        #writer.add_scalar('Accuracy/Validation', val_acc, epoch)
-        writer.add_scalars('Accuracy',{'Train': train_acc, 'Validation': val_acc}, epoch)
+        # 결과 로깅
+        writer.add_scalars('Accuracy', {'Train': train_acc, 'Validation': val_acc}, epoch)
         writer.add_scalars('Loss', {'Train': train_loss, 'Validation': val_loss}, epoch)
+        # 현재 lr 기록 (step 전 값을 epoch에 대응되는 lr로 저장)
+        writer.add_scalar('LR', scheduler.get_last_lr()[0], epoch)
+
+        # epoch 끝에 LR 갱신 (CosineAnnealing은 epoch 단위로 step)
+        scheduler.step()
+
         early_stopper(val_loss, model, best_model_path)
 
         if early_stopper.early_stop:
@@ -180,20 +183,19 @@ def final_test(best_model_path, model_name, test_loader, criterion, device):
      device: 사용할 장치
     """
     if best_model_path and os.path.exists(best_model_path):
-       print("\n" + "=" * 50)
-       print("Starting Final Test on the Best Saved Model...")
+        print("\n" + "=" * 50)
+        print("Starting Final Test on the Best Saved Model...")
+
         # 1. 최적 모델 로드 (구조 재정의 후 저장된 가중치 불러오기)
-        # NOTE: model_name을 사용하여 모델 구조를 다시 만듭니다.
-       best_model = get_resnet(name=model_name, num_classes=10).to(device)
-       best_model.load_state_dict(torch.load(best_model_path))
+        best_model = get_resnet(name=model_name, num_classes=10).to(device)
+        best_model.load_state_dict(torch.load(best_model_path, map_location=device, weights_only=True))
 
-      # 2. Test 데이터셋으로 평가
-
-       test_loss, test_acc = evaluate(best_model, test_loader, criterion, device)
-       print("\n--- Final Test Results ---")
-       print(f"Model: {model_name} (Best Validation Model)")
-       print(f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.2f}%")
-       print("=" * 50)
+        # 2. Test 데이터셋으로 평가
+        test_loss, test_acc = evaluate(best_model, test_loader, criterion, device)
+        print("\n--- Final Test Results ---")
+        print(f"Model: {model_name} (Best Validation Model)")
+        print(f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.2f}%")
+        print("=" * 50)
     else:
         print("\n[Warning] Best model path not found. Skipping final test.")
 

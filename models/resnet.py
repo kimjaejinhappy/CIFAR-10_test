@@ -85,6 +85,23 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
+        # --- 가중치 초기화 ---
+        # 1. Kaiming He 초기화: Conv는 fan_out + ReLU에 맞춰 정규분포로,
+        #    BatchNorm은 weight=1, bias=0으로 시작 (표준 ResNet 관행)
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+        # 2. Zero-init last BN: 각 BasicBlock의 마지막 BN weight를 0으로.
+        #    학습 시작 시 잔차분기 F(x)=0이 되어 블록이 identity로 동작 → 초기 학습 안정화
+        #    (1번 루프에서 BN을 1로 초기화한 뒤 일부만 0으로 덮어쓰는 순서가 중요)
+        for m in self.modules():
+            if isinstance(m, BasicBlock):
+                nn.init.constant_(m.bn2.weight, 0)
+
     def _make_layer(self, block, out_channels, blocks, stride):
         """
         블록들을 쌓아서 하나의 stage(layer)로 만듦
@@ -135,7 +152,7 @@ class ResNet(nn.Module):
 
         return x
     
-def get_resnet(name='resnet18', num_classes=10): #이 부분이 resnet 18, resnet34일때 basicblock을 어떻게 사용할건지 알려주는 코드
+def get_resnet(name='resnet18', num_classes=10): #이 부분이 resnet 18, resnet34일때 basicblock을 어떻게 사용할건지 알려주는 코드= 각 stage에 basicblock을 몇개씩 쌓을지
     """
     ResNet 모델을 이름으로 쉽게 생성하는 함수
     - name: 'resnet18' 또는 'resnet34'

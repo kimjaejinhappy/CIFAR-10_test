@@ -1,1 +1,17 @@
+# Datasets
 data/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Training artifacts (별도 보관 — Drive, W&B 등)
+runs/
+checkpoint/
+*.pth
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store

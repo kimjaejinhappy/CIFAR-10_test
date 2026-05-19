@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import argparse  # 커맨드 라인 인자(argument)를 파싱하는 라이브러리
 import os
+from datetime import datetime  # 로그 디렉토리 타임스탬프용
 
 #TensorBoard 를 위한 묘듈
 from torch.utils.tensorboard import SummaryWriter
@@ -35,6 +36,8 @@ def main():
                         help='initial learning rate')
     parser.add_argument('--patience', default=10, type=int,
                         help='Early Stopping patience(epochs to wait for improvement)')
+    parser.add_argument('--exp-name', default='', type=str,
+                        help='실험 식별자 (예: init_v2, val_fix). TensorBoard 로그 폴더명에 들어감')
     args = parser.parse_args()
 
     # --- 2-2. 기본 환경 설정 ---
@@ -44,10 +47,15 @@ def main():
     print("=" * 50)
     print(f"Start training {args.model} for {args.epochs} epochs.")
 
-    # --- 2-3. TensorBoard Writer 초기화
-    writer = SummaryWriter(log_dir= f'runs/{args.model}_cifar10')  # utils.tensorboar 묘듈에 포함된 클래스, 파일이 저장될 폴더 경로를 설정하는거임
-    print(f"Tensorboar logs saved to: runs/{args.model}_cifar10")
-    print("="*50)
+    # --- 2-3. TensorBoard Writer 초기화 ---
+    # log_dir = runs/<model>_cifar10[_<exp-name>]_<MMDD_HHMM>
+    # 실험명은 옵션이고, 타임스탬프는 항상 붙어서 같은 폴더에 덮어쓰는 사고를 막음
+    suffix = f'_{args.exp_name}' if args.exp_name else ''
+    timestamp = datetime.now().strftime('%m%d_%H%M')
+    log_dir = f'runs/{args.model}_cifar10{suffix}_{timestamp}'
+    writer = SummaryWriter(log_dir=log_dir)
+    print(f"TensorBoard logs saved to: {log_dir}")
+    print("=" * 50)
 
     # --- 2-4. 부품 조립 (데이터, 모델, 손실함수, 옵티마이저) ---
     # 1. 데이터 로더 준비: train,val, test
@@ -61,14 +69,18 @@ def main():
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
+    # 4. LR 스케줄러: CosineAnnealing — args.lr → 0으로 epochs에 걸쳐 부드럽게 감소
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+
     # --- 2-5. 훈련 시작 및 최적 모델 가중치 경로 받기
     best_model_path = train(
-        model=model, 
-        train_loader=train_loader, 
+        model=model,
+        train_loader=train_loader,
         val_loader=val_loader,
-        optimizer=optimizer, 
-        criterion=criterion, 
-        device= device, 
+        optimizer=optimizer,
+        scheduler=scheduler,
+        criterion=criterion,
+        device= device,
         epochs=args.epochs,
         patience= args.patience,
         writer=writer)

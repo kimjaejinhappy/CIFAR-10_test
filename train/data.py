@@ -3,7 +3,7 @@
 # --- 1. 필요한 도구들 가져오기 ---
 import torch
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 
 # --- 2. 데이터 로더 생성 함수 정의 ---
 def get_cifar10_loaders(batch_size=128, val_ratio =0.1):
@@ -41,27 +41,29 @@ def get_cifar10_loaders(batch_size=128, val_ratio =0.1):
     ])
 
     # --- 4. CIFAR-10 데이터셋 다운로드 및 변환 규칙 적용 ---
-    # train 데이터셋
+    # 같은 CIFAR-10 train split을 두 번 만들되 transform만 다르게.
+    # 이렇게 해야 random_split이 아닌 Subset(같은 인덱스)으로 나눌 때
+    # train에는 augmentation, val에는 Normalize만 들어가게 할 수 있음.
     full_train_dataset = datasets.CIFAR10(
-        root='./data',      # 데이터가 저장될 경로
-        train=True,         # 훈련용 데이터셋임을 명시
-        download=True,      # 해당 경로에 데이터가 없으면 자동으로 다운로드
-        transform=transform_train # 위에서 정의한 훈련용 변환 규칙 적용
+        root='./data', train=True, download=True, transform=transform_train
+    )
+    full_val_dataset = datasets.CIFAR10(
+        root='./data', train=True, download=True, transform=transform_test_val
     )
 
-
-    # Train/Vlidaiton 데이터셋 분리
+    # Train/Validation 인덱스 분리 (같은 시드로 결정적 split)
     total_train_size = len(full_train_dataset)
-    val_size = int(val_ratio* total_train_size)
-    train_size= total_train_size - val_size
+    val_size = int(val_ratio * total_train_size)
+    train_size = total_train_size - val_size
 
-    # 데이터셋을 Train과 Validation으로 무작위 분리합니다. random_split함수(총데이터, [분리하고 싶은 size1, size2])
-    train_dataset, val_dataset = random_split(
-        full_train_dataset, 
-        [train_size, val_size],
-        generator= torch.Generator().manual_seed(42)  # 처음만 랜덤으로 분리되고, 분리된 순간, trian, vali 데이터셋 고정
+    generator = torch.Generator().manual_seed(42)
+    indices = torch.randperm(total_train_size, generator=generator).tolist()
+    train_indices = indices[:train_size]
+    val_indices = indices[train_size:]
 
-    )
+    # 같은 인덱스를 두 base dataset에 각각 적용 → transform만 달라짐
+    train_dataset = Subset(full_train_dataset, train_indices)
+    val_dataset = Subset(full_val_dataset, val_indices)
 
     # test 데이터셋
     test_dataset = datasets.CIFAR10(
